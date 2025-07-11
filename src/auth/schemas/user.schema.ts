@@ -13,6 +13,13 @@ export class User{
 
     @Prop()
     password: string
+
+    //for forget or reset password
+     @Prop()
+    resetCode?: string;
+
+    @Prop()
+    resetCodeExpires?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
