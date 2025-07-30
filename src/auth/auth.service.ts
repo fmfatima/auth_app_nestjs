@@ -10,6 +10,8 @@ import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
+import * as crypto from 'crypto';
+import { SendInvitationDto } from './dto/send-invitation.dto';
 
 @Injectable()
 export class AuthService {
@@ -18,6 +20,32 @@ export class AuthService {
     private userModel: Model<User>,
     private jwtService: JwtService,
     ) {}
+
+    // async signUp(signUpDto: SignUpDto): Promise<{ token: string }> {
+    // const { name, email, password, token } = signUpDto;
+
+    // const invitedUser = await this.userModel.findOne({ email });
+
+    // if (!invitedUser || !invitedUser.invitationToken || invitedUser.invitationToken !== token) {
+    //     throw new UnauthorizedException('Invalid or expired invitation token');
+    // }
+
+    // const now = new Date();
+    // if (invitedUser.invitationTokenExpires && invitedUser.invitationTokenExpires < now) {
+    //     throw new UnauthorizedException('Invitation token expired');
+    // }
+
+    // invitedUser.name = name;
+    // invitedUser.password = await bcrypt.hash(password, 10);
+    // invitedUser.invitationToken = undefined;
+    // invitedUser.invitationTokenExpires = undefined;
+    // invitedUser.invited = false;
+    // await invitedUser.save();
+
+    // const jwt = this.jwtService.sign({ id: invitedUser._id, role: invitedUser.role });
+
+    // return { token: jwt };
+    // }
 
     async signUp(signUpDto: SignUpDto): Promise<{ token: string }> {
     const { name, email, password } = signUpDto;
@@ -30,10 +58,14 @@ export class AuthService {
         password: hashedPassword,
     });
 
-    const token = this.jwtService.sign({ id: user._id });
+    const token = this.jwtService.sign({ 
+        id: user._id,
+        role: user.role,    //include role as admin or employee 
+    });
 
     return { token };
     }
+
 
     async login(loginDto: LoginDto): Promise<{ token: string }> {
     const { email, password } = loginDto;
@@ -50,7 +82,10 @@ export class AuthService {
         throw new UnauthorizedException('Invalid email or password');
     }
 
-    const token = this.jwtService.sign({ id: user._id });
+    const token = this.jwtService.sign({ 
+        id: user._id,
+        role: user.role,    //include role as admin or employee 
+    });
 
     return { token };
     }
@@ -98,6 +133,79 @@ export class AuthService {
 
     return { message: 'Password reset successfully' };
     }
+
+    //invitation sedn admin feature
+    async sendInvitation(dto: SendInvitationDto): Promise<{ message: string }> {
+    const { email, role = 'employee' } = dto;
+
+    const existingUser = await this.userModel.findOne({ email });
+    if (existingUser) {
+        throw new BadRequestException('User already exists');
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date();
+    expires.setHours(expires.getHours() + 24); // token valid for 24 hrs
+
+    // Save as a placeholder user (or just save invitation)
+    await this.userModel.create({
+        email,
+        role,
+        invited: true,
+        invitationToken: token,
+        invitationTokenExpires: expires,
+    });
+
+    const invitationLink = `https://leave-dashboard/signup?token=${token}&email=${email}`;
+
+    // Replace with actual email service (e.g. Nodemailer)
+    console.log(`Invitation link: ${invitationLink}`);
+
+    return { message: 'Invitation sent (mocked)' };
+    }
+
+    // Get all users with role 'employee'
+    async findAllUsers() {
+    return this.userModel.find({ role: 'employee' }).select('-password'); // remove password
+    }
+
+    // Search user by email or name
+    async findUser(term: string) {
+    return this.userModel.findOne({
+        $or: [{ email: term }, { name: term }],
+    }).select('-password');
+    }
+
+    //update user using emial
+    async updateUserByEmail(email: string, data: any) {
+    const user = await this.userModel.findOne({ email });
+
+    if (!user) {
+        throw new NotFoundException('User not found');
+    }
+
+    if (data.password) {
+        data.password = await bcrypt.hash(data.password, 10);
+    }
+
+    Object.assign(user, data); // merge new fields
+    await user.save();
+
+    const { password, ...rest } = user.toObject(); // exclude password
+    return rest;
+    }
+
+
+    async deleteUserByEmail(email: string) {
+    const user = await this.userModel.findOneAndDelete({ email });
+
+    if (!user) {
+        throw new NotFoundException('User not found');
+    }
+
+    return { message: `User with email ${email} deleted successfully` };
+    }
+
 
 
 }

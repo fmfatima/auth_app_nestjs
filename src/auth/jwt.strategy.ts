@@ -19,7 +19,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
+    async validate(payload: any) {
     const { id } = payload;
 
     const user = await this.userModel.findById(id);
@@ -28,6 +28,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Login first to access this endpoint.');
     }
 
-    return user;
+    // Return role + id, not full user
+    return {
+      userId: user._id,
+      role: user.role,
+      email: user.email,
+    };
   }
 }

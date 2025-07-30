@@ -13,4 +13,12 @@ export class SignUpDto {
   @IsString()
   @MinLength(6)
   readonly password: string;
+
+  @IsNotEmpty()
+  @IsString()
+  role?: 'admin' | 'employee';
+
+  @IsNotEmpty()
+  @IsString()
+  token: string;
 }

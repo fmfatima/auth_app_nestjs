@@ -20,6 +20,20 @@ export class User{
 
     @Prop()
     resetCodeExpires?: Date;
+
+    //role based authentication
+    @Prop({ default: 'employee', enum: ['admin', 'employee'] }) 
+    role: string;
+
+    @Prop({ default: false })
+    invited: boolean;
+
+    @Prop()
+    invitationToken?: string;
+
+    @Prop()
+    invitationTokenExpires?: Date;
+
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
