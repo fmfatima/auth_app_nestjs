@@ -1,4 +1,4 @@
-import { Body, Post, Get, Query, Patch, Param } from '@nestjs/common';
+import { Body, Post, Get, Query, Patch, Param, Delete } from '@nestjs/common';
 import { LeaveService } from './leave.service';
 import { Controller } from '@nestjs/common';
 import { LeaveRequestDto } from './dto/leaveRequest.dto';
@@ -57,7 +57,7 @@ export class LeaveController {
 
     // @UseGuards(AuthGuard('jwt'), RolesGuard)
     // @Roles('employee')
-    @Patch('delete-leave/:id')
+    @Delete('delete-leave/:id')
     deleteLeave(
         @Param('id') id: string,
         @Query('status') status: 'delete'

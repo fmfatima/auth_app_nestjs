@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LeaveModule } from './leave/leave.module';
+import { EmployeeModule } from './employee/employee.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { LeaveModule } from './leave/leave.module';
     }),
     AuthModule,
     LeaveModule,
+    EmployeeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
@@ -33,6 +35,7 @@ export class AppModule {}
 // import { AppController } from './app.controller';
 // import { AppService } from './app.service';
 // import { AuthModule } from './auth/auth.module';
+// import { EmployeeModule } from './employee/employee.module';
 
 // @Module({
 //   imports: [AuthModule],
