@@ -37,12 +37,13 @@ export class EmployeeController {
         return this.employeeService.findUser(email);
     }
     
-    // PATCH /employee/users/email/:email
+    // PATCH /employee/update/:email
     
-    @Patch('users/email/:email')
-    updateUserByEmail(@Param('email') email: string, @Body() data: UpdateEmployeeDto) {
+    @Patch('/update/:email')
+    updateEmployee( @Param('email') email: string, @Body() data: UpdateEmployeeDto,) {
     return this.employeeService.updateUserByEmail(email, data);
     }
+
 
     // Delete /employee/users/:email
     // @UseGuards(AuthGuard('jwt'), RolesGuard)

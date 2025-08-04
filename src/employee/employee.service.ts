@@ -6,13 +6,14 @@ import * as bcrypt from 'bcryptjs';
 // import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import { SendInvitationDto } from './dto/send-invitation.dto';
+import { UpdateEmployeeDto } from './dto/update-employee.dto';
 
 
 @Injectable()
 export class EmployeeService {
     constructor(
     @InjectModel(Employee.name)
-    private userModel: Model<Employee>,
+    private readonly userModel: Model<Employee>,
     // private jwtService: JwtService,
     ) {}
 
@@ -59,15 +60,15 @@ export class EmployeeService {
     }
 
     //update user using emial
-    async updateUserByEmail(email: string, data: any) {
+    async updateUserByEmail(email: string, data: UpdateEmployeeDto) {
     const user = await this.userModel.findOne({ email });
 
     if (!user) {
         throw new NotFoundException('User not found');
     }
 
-    if (data.password) {
-        data.password = await bcrypt.hash(data.password, 10);
+    if (typeof data === 'object' && 'password' in data) {
+        data.password = await bcrypt.hash(data.password!, 10);
     }
 
     Object.assign(user, data); // merge new fields

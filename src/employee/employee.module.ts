@@ -10,5 +10,6 @@ import { Employee, EmployeeSchema } from './schemas/employee.schema';
   ],
   controllers: [EmployeeController],
   providers: [EmployeeService],
+  // exports: [CompanyService],
 })
 export class EmployeeModule {}

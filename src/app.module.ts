@@ -6,6 +6,9 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LeaveModule } from './leave/leave.module';
 import { EmployeeModule } from './employee/employee.module';
+import { CompanyController } from './company/company.controller';
+import { CompanyModule } from './company/company.module';
+
 
 @Module({
   imports: [
@@ -20,8 +23,9 @@ import { EmployeeModule } from './employee/employee.module';
     AuthModule,
     LeaveModule,
     EmployeeModule,
+    CompanyModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, CompanyController],
   providers: [AppService],
 })
 export class AppModule {}
