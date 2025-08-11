@@ -2,9 +2,9 @@ import { Body, Controller, Get, Post, UseGuards, Param, Patch, Delete } from '@n
 import { SendInvitationDto } from './dto/send-invitation.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { EmployeeService } from './employee.service';
-// import { AuthGuard } from '@nestjs/passport';
-// import { Roles } from 'src/common/roles.decorator';
-// import { RolesGuard } from 'src/common/roles.guard';
+import { AuthGuard } from '@nestjs/passport';
+import { Roles } from 'src/common/roles.decorator';
+import { RolesGuard } from 'src/common/roles.guard';
 
 
 @Controller('employee')
@@ -13,32 +13,36 @@ export class EmployeeController {
         private readonly employeeService: EmployeeService
     ) {}
 
+    //Admin: send invitation
     // POST /employee/send-invitation
-    // @UseGuards(AuthGuard('jwt'), RolesGuard)
-    // @Roles('admin')
+    @UseGuards(AuthGuard('jwt'), RolesGuard)
+    @Roles('admin')
     @Post('send-invitation')
     sendInvitation(@Body() dto: SendInvitationDto) {
     return this.employeeService.sendInvitation(dto);
     }
 
+    //Admin: find all eployees
     // GET /employee/users
-    // @UseGuards(AuthGuard('jwt'), RolesGuard)
-    // @Roles('admin') // apply to all routes below
+    @UseGuards(AuthGuard('jwt'), RolesGuard)
+    @Roles('admin') // apply to all routes below
     @Get('users')
     findAll() {
         return this.employeeService.findAllUsers();
     }
 
+    // Admin: Find employee by email
     // GET /employee/users/:email
-    // @UseGuards(AuthGuard('jwt'), RolesGuard)
-    // @Roles('admin') // apply to all routes below
+    @UseGuards(AuthGuard('jwt'), RolesGuard)
+    @Roles('admin') // apply to all routes below
     @Get('users/:email')
     findOne(@Param('email') email: string) {
         return this.employeeService.findUser(email);
     }
     
     // PATCH /employee/update/:email
-    
+    @UseGuards(AuthGuard('jwt'), RolesGuard)
+    @Roles('admin')     
     @Patch('/update/:email')
     updateEmployee( @Param('email') email: string, @Body() data: UpdateEmployeeDto,) {
     return this.employeeService.updateUserByEmail(email, data);
@@ -46,8 +50,8 @@ export class EmployeeController {
 
 
     // Delete /employee/users/:email
-    // @UseGuards(AuthGuard('jwt'), RolesGuard)
-    // @Roles('admin') 
+    @UseGuards(AuthGuard('jwt'), RolesGuard)
+    @Roles('admin') 
     @Delete('users/:email')
     deleteUserByEmail(@Param('email') email: string) {
     return this.employeeService.deleteUserByEmail(email);

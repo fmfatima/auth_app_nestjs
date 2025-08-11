@@ -8,8 +8,11 @@ import { PassportModule } from '@nestjs/passport';
 // import { JwtStrategy } from './jwt.strategy';
 import { UserLeave, UserLeaveSchema } from './schemas/leave.schema';
 
+import { AuthModule } from '../auth/auth.module';
+
 @Module({
   imports: [
+    AuthModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -24,6 +27,5 @@ import { UserLeave, UserLeaveSchema } from './schemas/leave.schema';
 
   providers: [LeaveService],
   controllers: [LeaveController],
-  // exports: [JwtStrategy],
 })
 export class LeaveModule {}
