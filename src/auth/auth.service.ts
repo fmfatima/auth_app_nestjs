@@ -2,127 +2,150 @@ import { BadRequestException, Injectable, NotFoundException, UnauthorizedExcepti
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User } from './schemas/user.schema';
-
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { SignUpDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
-
-import * as crypto from 'crypto';
+import { AuthResponseDto } from './dto/auth-response.dto';
+import { UserPublicDto } from './dto/user-public.dto';
 
 @Injectable()
 export class AuthService {
     constructor(
-    @InjectModel(User.name)
-    private userModel: Model<User>,
-    private jwtService: JwtService,
+        @InjectModel(User.name) private userModel: Model<User>,
+        private jwtService: JwtService,
     ) {}
 
-    // async signUp(signUpDto: SignUpDto): Promise<{ token: string }> {
-    // const { name, email, password, token } = signUpDto;
+    private toPublicDto(user: User): UserPublicDto {
+        return {
+        id: user._id.toString(),
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        role: user.role,
+        };
+    }
 
-    // const invitedUser = await this.userModel.findOne({ email });
+    private generateAccessToken(user: User): string {
+        return this.jwtService.sign(
+        { id: user._id, role: user.role },
+        { secret: process.env.JWT_SECRET, expiresIn: '15m' },
+        );
+    }
 
-    // if (!invitedUser || !invitedUser.invitationToken || invitedUser.invitationToken !== token) {
-    //     throw new UnauthorizedException('Invalid or expired invitation token');
-    // }
+    private generateRefreshToken(user: User): string {
+        return this.jwtService.sign(
+        { id: user._id },
+        { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '7d' },
+        );
+    }
 
-    // const now = new Date();
-    // if (invitedUser.invitationTokenExpires && invitedUser.invitationTokenExpires < now) {
-    //     throw new UnauthorizedException('Invitation token expired');
-    // }
+        async signUp(signUpDto: SignUpDto): Promise<AuthResponseDto> {
+    const { firstName, lastName, email, password, role } = signUpDto;
 
-    // invitedUser.name = name;
-    // invitedUser.password = await bcrypt.hash(password, 10);
-    // invitedUser.invitationToken = undefined;
-    // invitedUser.invitationTokenExpires = undefined;
-    // invitedUser.invited = false;
-    // await invitedUser.save();
+    // Check if email exists
+    const existingUser = await this.userModel.findOne({ email });
+    if (existingUser) {
+        throw new BadRequestException('Email already registered');
+    }
 
-    // const jwt = this.jwtService.sign({ id: invitedUser._id, role: invitedUser.role });
-
-    // return { token: jwt };
-    // }
-
-    async signUp(signUpDto: SignUpDto): Promise<{ token: string }> {
-    const { name, email, password } = signUpDto;
-
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Create new user
     const user = await this.userModel.create({
-        name,
+        firstName,
+        lastName,
         email,
         password: hashedPassword,
+        role: role || 'employee', // default from schema
     });
 
-    const token = this.jwtService.sign({ 
-        id: user._id,
-        role: user.role,    //include role as admin or employee 
-    });
+    // Generate tokens
+    const token = this.generateAccessToken(user);
+    const refreshToken = this.generateRefreshToken(user);
 
-    return { token };
+    // Save refresh token
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    return {
+        token,
+        refreshToken,
+        user: {
+        id: user._id.toString(),
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        role: user.role,
+        },
+    };
     }
 
 
-    async login(loginDto: LoginDto): Promise<{ token: string }> {
+  async login(loginDto: LoginDto): Promise<AuthResponseDto> {
     const { email, password } = loginDto;
 
     const user = await this.userModel.findOne({ email });
-
-    if (!user) {
-        throw new UnauthorizedException('Invalid email or password');
-    }
+    if (!user) throw new UnauthorizedException('Invalid email or password');
 
     const isPasswordMatched = await bcrypt.compare(password, user.password);
+    if (!isPasswordMatched) throw new UnauthorizedException('Invalid email or password');
 
-    if (!isPasswordMatched) {
-        throw new UnauthorizedException('Invalid email or password');
+    const token = this.generateAccessToken(user);
+    const refreshToken = this.generateRefreshToken(user);
+
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    return {
+      token,
+      refreshToken,
+      user: this.toPublicDto(user),
+    };
+  }
+
+  async refreshToken(refreshToken: string): Promise<{ token: string }> {
+    try {
+      const payload = this.jwtService.verify(refreshToken, { secret: process.env.JWT_REFRESH_SECRET });
+      const user = await this.userModel.findById(payload.id);
+
+      if (!user || user.refreshToken !== refreshToken) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      const newAccessToken = this.generateAccessToken(user);
+      return { token: newAccessToken };
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
     }
+  }
 
-    const token = this.jwtService.sign({ 
-        id: user._id,
-        role: user.role,    //include role as admin or employee 
-    });
-
-    return { token };
-    }
-
-    // forgot password logic
-    async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
     const user = await this.userModel.findOne({ email: dto.email });
+    if (!user) throw new NotFoundException('User not found');
 
-    if (!user) {
-        throw new NotFoundException('User not found');
-    }
-
-    const resetCode = Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit code
+    const resetCode = Math.floor(1000 + Math.random() * 9000).toString();
     const expires = new Date();
-    expires.setMinutes(expires.getMinutes() + 10); // Code valid for 10 min
+    expires.setMinutes(expires.getMinutes() + 10);
 
     user.resetCode = resetCode;
     user.resetCodeExpires = expires;
     await user.save();
 
-    // For now: log it or return it in dev mode
     console.log(`Reset code for ${user.email}: ${resetCode}`);
-
     return { message: 'Reset code sent to email (mocked)' };
-    }
+  }
 
-    //Reset password logic
-
-    async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
     const user = await this.userModel.findOne({ email: dto.email });
-
     if (!user || user.resetCode !== dto.code) {
-        throw new BadRequestException('Invalid code or email');
+      throw new BadRequestException('Invalid code or email');
     }
 
     const now = new Date();
     if (user.resetCodeExpires && user.resetCodeExpires < now) {
-        throw new BadRequestException('Reset code has expired');
+      throw new BadRequestException('Reset code has expired');
     }
 
     user.password = await bcrypt.hash(dto.newPassword, 10);
@@ -131,6 +154,174 @@ export class AuthService {
     await user.save();
 
     return { message: 'Password reset successfully' };
-    }
-
+  }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+// import { InjectModel } from '@nestjs/mongoose';
+// import { Model } from 'mongoose';
+// import { User } from './schemas/user.schema';
+
+// import * as bcrypt from 'bcryptjs';
+// import { JwtService } from '@nestjs/jwt';
+// import { SignUpDto } from './dto/signup.dto';
+// import { LoginDto } from './dto/login.dto';
+// import { ForgotPasswordDto } from './dto/forgot-password.dto';
+// import { ResetPasswordDto } from './dto/reset-password.dto';
+
+// import * as crypto from 'crypto';
+
+// @Injectable()
+// export class AuthService {
+//     constructor(
+//     @InjectModel(User.name)
+//     private userModel: Model<User>,
+//     private jwtService: JwtService,
+//     ) {}
+
+//     // async signUp(signUpDto: SignUpDto): Promise<{ token: string }> {
+//     // const { name, email, password, token } = signUpDto;
+
+//     // const invitedUser = await this.userModel.findOne({ email });
+
+//     // if (!invitedUser || !invitedUser.invitationToken || invitedUser.invitationToken !== token) {
+//     //     throw new UnauthorizedException('Invalid or expired invitation token');
+//     // }
+
+//     // const now = new Date();
+//     // if (invitedUser.invitationTokenExpires && invitedUser.invitationTokenExpires < now) {
+//     //     throw new UnauthorizedException('Invitation token expired');
+//     // }
+
+//     // invitedUser.name = name;
+//     // invitedUser.password = await bcrypt.hash(password, 10);
+//     // invitedUser.invitationToken = undefined;
+//     // invitedUser.invitationTokenExpires = undefined;
+//     // invitedUser.invited = false;
+//     // await invitedUser.save();
+
+//     // const jwt = this.jwtService.sign({ id: invitedUser._id, role: invitedUser.role });
+
+//     // return { token: jwt };
+//     // }
+
+//     async signUp(signUpDto: SignUpDto): Promise<{ token: string }> {
+//     const { name, email, password } = signUpDto;
+
+//     const hashedPassword = await bcrypt.hash(password, 10);
+
+//     const user = await this.userModel.create({
+//         name,
+//         email,
+//         password: hashedPassword,
+//     });
+
+//     const token = this.jwtService.sign({ 
+//         id: user._id,
+//         role: user.role,    //include role as admin or employee 
+//     });
+
+//     return { token };
+//     }
+
+
+//     async login(loginDto: LoginDto): Promise<{ token: string }> {
+//     const { email, password } = loginDto;
+
+//     const user = await this.userModel.findOne({ email });
+
+//     if (!user) {
+//         throw new UnauthorizedException('Invalid email or password');
+//     }
+
+//     const isPasswordMatched = await bcrypt.compare(password, user.password);
+
+//     if (!isPasswordMatched) {
+//         throw new UnauthorizedException('Invalid email or password');
+//     }
+
+//     const token = this.jwtService.sign({ 
+//         id: user._id,
+//         role: user.role,    //include role as admin or employee 
+//     });
+
+//     return { token };
+//     }
+
+//     //refresh Token
+
+    
+//     // forgot password logic
+//     async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+//     const user = await this.userModel.findOne({ email: dto.email });
+
+//     if (!user) {
+//         throw new NotFoundException('User not found');
+//     }
+
+//     const resetCode = Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit code
+//     const expires = new Date();
+//     expires.setMinutes(expires.getMinutes() + 10); // Code valid for 10 min
+
+//     user.resetCode = resetCode;
+//     user.resetCodeExpires = expires;
+//     await user.save();
+
+//     // For now: log it or return it in dev mode
+//     console.log(`Reset code for ${user.email}: ${resetCode}`);
+
+//     return { message: 'Reset code sent to email (mocked)' };
+//     }
+
+//     //Reset password logic
+
+//     async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+//     const user = await this.userModel.findOne({ email: dto.email });
+
+//     if (!user || user.resetCode !== dto.code) {
+//         throw new BadRequestException('Invalid code or email');
+//     }
+
+//     const now = new Date();
+//     if (user.resetCodeExpires && user.resetCodeExpires < now) {
+//         throw new BadRequestException('Reset code has expired');
+//     }
+
+//     user.password = await bcrypt.hash(dto.newPassword, 10);
+//     user.resetCode = undefined;
+//     user.resetCodeExpires = undefined;
+//     await user.save();
+
+//     return { message: 'Password reset successfully' };
+//     }
+
+// }
